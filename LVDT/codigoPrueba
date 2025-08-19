@@ -1,0 +1,89 @@
+'CR1000 Datalogger Program for GEOKON Model 1450 DC-DC LVDT
+'Sensor Wiring:
+'Negro (Black) - Ground
+'Rojo (Red) - VX2 (12V Power Supply)
+'Verde (Green) - L4 (LVDT Output -)
+'Blanco (White) - H3 (LVDT Output +)
+'Transparente (Shield) - Ground
+
+'Declaración de variables públicas
+Public BattV                'Voltaje de batería del datalogger
+Public PTemp_C              'Temperatura del panel en grados Celsius
+Public LVDT_Output_mV       'Salida del LVDT en milivoltios
+Public LVDT_Displacement_mm 'Desplazamiento calculado en milímetros
+Public LVDT_Displacement_in 'Desplazamiento calculado en pulgadas
+
+'Factores de calibración del sensor (ajustar según certificado de calibración)
+Const SENSITIVITY_mV_per_mm = 29.71  'Sensibilidad en mV/mm (ejemplo del manual)
+Const SENSITIVITY_V_per_inch = 0.755 'Sensibilidad en V/inch (ejemplo del manual)
+
+'Lectura inicial de referencia
+Public Initial_Reading_mV   'Lectura inicial para comparación
+Public Zero_Reading_Set     'Flag para indicar si se ha establecido la lectura cero
+
+'Definición de tabla de datos
+DataTable(LVDT_Data,1,True,-1)
+  DataInterval(0,1,Min,10)  'Almacenar cada minuto, mantener 10 registros
+  Minimum(1,BattV,FP2,False,False)
+  Sample(1,PTemp_C,FP2)
+  Sample(1,LVDT_Output_mV,FP2)
+  Sample(1,LVDT_Displacement_mm,FP2)
+  Sample(1,LVDT_Displacement_in,FP2)
+EndTable
+
+'Programa principal
+BeginProg
+  'Inicialización
+  Zero_Reading_Set = False
+  Initial_Reading_mV = 0
+  
+  'Scan principal - cada 10 segundos
+  Scan(10,Sec,3,0)
+    
+    'Leer voltaje de batería
+    Battery(BattV)
+    
+    'Leer temperatura del panel
+    PanelTemp(PTemp_C,_60Hz)
+    
+    'Encender alimentación del sensor (VX2)
+    SW12(2,1)  'Enciende SW12 terminal 2 (VX2)
+    
+    'Esperar estabilización
+    Delay(0,100,mSec)
+    
+    'Leer voltaje diferencial del LVDT
+    'H3 (+) y L4 (-) con rango de autorange
+    VoltDiff(LVDT_Output_mV,1,mV2500,3,True,0,_60Hz,1.0,0)
+    
+    'Apagar alimentación del sensor para ahorrar energía
+    SW12(2,0)  'Apaga SW12 terminal 2
+    
+    'Establecer lectura inicial si no se ha hecho
+    If Zero_Reading_Set = False Then
+      Initial_Reading_mV = LVDT_Output_mV
+      Zero_Reading_Set = True
+    EndIf
+    
+    'Calcular desplazamiento en milímetros desde la lectura inicial
+    LVDT_Displacement_mm = (LVDT_Output_mV - Initial_Reading_mV) / SENSITIVITY_mV_per_mm
+    
+    'Calcular desplazamiento en pulgadas desde la lectura inicial
+    LVDT_Displacement_in = ((LVDT_Output_mV - Initial_Reading_mV) / 1000) / SENSITIVITY_V_per_inch
+    
+    'Llamar a la tabla de datos
+    CallTable(LVDT_Data)
+    
+  NextScan
+  
+  'Scan lento para monitoreo general - cada minuto
+  SlowSequence
+  Scan(60,Sec,10,0)
+    
+    'Aquí puedes agregar otras mediciones menos frecuentes
+    'o rutinas de mantenimiento
+    
+  NextScan
+  EndSequence
+  
+EndProg
