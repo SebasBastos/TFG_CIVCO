@@ -1,0 +1,216 @@
+'CR1000
+'Created by Short Cut (2.9)
+
+'Declare general Variables
+Public BattV
+Public FCLoaded
+Public PTemp_C
+
+'Variables for LVDT 1
+Public Disp_mm
+Public COff
+Public CReps
+Public ZMode
+Public CIndex
+Public CAvg
+Public GFLV1
+
+'Variables for LVDT 2
+Public Disp2_mm
+Public COff_1
+Public CReps_1
+Public ZMode_1
+Public CIndex_1
+Public CAvg_1
+Public GFLV2
+
+'Variables for straingage 1
+Public Strain_2
+Public Vr1000_2
+Public GFRaw_2
+Public GFAdj_2
+Public BrZero_2
+Public CKnown_2
+Public CReps_2
+Public ZMode_2
+Public QBSSMode_2
+Public CIndex_2
+Public CAvg_2
+Public GFSTR1
+
+'Variables for straingage 2
+Public Strain_3
+Public Vr1000_3
+Public GFRaw_3
+Public GFAdj_3
+Public BrZero_3
+Public CKnown_3
+Public CReps_3
+Public ZMode_3
+Public QBSSMode_3
+Public CIndex_3
+Public CAvg_3
+Public GFSTR2
+
+'Variables for load cell
+Public CReps_6
+Public ZMode_6
+Public CIndex_6
+Public CAvg_6
+Public CKnown_6
+Public CMult_6
+Public Coff_6
+Public MOMode_6
+Public Carga_kg
+Public Vr1000_6
+Public GFLC
+
+'Define general units
+Units BattV=Volts
+Units PTemp_C=Deg C
+
+'Define units for Gage factors
+Units GFSTR1=unitless
+Units GFSTR2=unitless
+Units GFLC=unitless
+
+'Define Data Tables
+DataTable(Table1,True,-1)
+	DataInterval(0,5,Sec,10)
+	Sample(1,Carga_kg,IEEE4)
+	Sample(1,Strain_2,IEEE4)
+	Sample(1,Strain_3,IEEE4)
+	Sample(1,Vr1000_2,IEEE4)
+	Sample(1,Vr1000_3,IEEE4)
+	Sample(1,Vr1000_6,IEEE4)
+EndTable
+
+DataTable(Table2,True,-1)
+	DataInterval(0,1440,Min,10)
+	Minimum(1,BattV,FP2,False,False)
+EndTable
+
+'Table LVDT 
+DataTable(Table3,True,-1)
+	DataInterval(0,60,Min,10)
+	Average(1,Disp_mm,FP2,False)
+	Maximum(1,Disp_mm,FP2,False,True)
+	Sample(1,Disp_mm,FP2)
+	Minimum(1,Disp_mm,FP2,False,True)
+	Average(1,Disp2_mm,FP2,False)
+	Sample(1,Disp2_mm,FP2)
+	Totalize(1,Disp2_mm,FP2,False)
+EndTable
+
+'Calibration history table
+DataTable(CalHist,NewFieldCal,10)
+	SampleFieldCal
+EndTable
+
+'Main Program
+BeginProg
+  
+
+'Gage Factors or Calibration Factors
+      'Straingage 1
+         GFSTR1=493.936
+      'Straingage 2
+         GFSTR2=489.2
+      'LVDT 1
+         GFLV1= 90.73
+      'LVDT 2
+         GFLV2= 90.73
+      'Load Cell
+         GFLC=-300.648
+  
+  'Initialize calibration variables for
+	'Full Bridge Strain, 350 ohm with 4WFBS350 TIM measurement 'Vr1000_2'
+	CIndex_2=1 : CAvg_2=1 : CReps_2=1 : GFRaw_2=1000/GFSTR1 : GFAdj_2=GFRaw_2
+	'Full Bridge Strain, 350 ohm with 4WFBS350 TIM measurement 'Vr1000_3'
+	CIndex_3=1 : CAvg_3=1 : CReps_3=1 : GFRaw_3=1000/GFSTR2 : GFAdj_3=GFRaw_3
+  'Celda de carga
+	CIndex_6=1 : CAvg_6=1 : CReps_6=1 :CMult_6=1
+
+	SerialOpen(Com1,38400,0,0,0)
+	
+FCLoaded=LoadFieldCal(True)
+	
+	'Main Scan
+	Scan(5,Sec,0,0)
+		'Default Datalogger Battery Voltage measurement 'BattV'
+		Battery(BattV)
+		'Default Wiring Panel Temperature measurement 'PTemp_C'
+		PanelTemp(PTemp_C,_60Hz)
+
+		'////////////////////////////////////////////////
+		'////////// straingage 1 routine ////////////////
+		'////////////////////////////////////////////////
+		
+		'Full Bridge Strain, 350 ohm measurement 'Vr1000_2'
+		BrFull(Vr1000_2,1,mV7_5,1,Vx2,1,2500,True,True,0,250,1,0)
+		'Calculated strain result 'Strain' for
+		'Full Bridge Strain, 350 ohm measurement 'Vr1000_2'
+		StrainCalc(Strain_2,1,Vr1000_2,BrZero_2,4,GFAdj_2,0)
+		'Bending full bridge strain shunt calibration for
+		'Full Bridge Strain, 350 ohm measurement 'Vr1000_2'
+		FieldCalStrain(43,Strain_2,1,GFAdj_2,0,QBSSMode_2,CKnown_2,CIndex_2,CAvg_2,GFRaw_2,0)
+		'Zeroing calibration for
+		'Full Bridge Strain, 350 ohm measurement 'Vr1000_2'
+		FieldCalStrain(10,Vr1000_2,CReps_2,0,BrZero_2,ZMode_2,0,CIndex_2,CAvg_2,0,Strain_2)
+		
+		'////////////////////////////////////////////////
+		'////////// straingage 2 routine ////////////////
+		'////////////////////////////////////////////////
+		
+		'Full Bridge Strain, 350 ohm measurement 'Vr1000_3'
+		BrFull(Vr1000_3,1,mV7_5,2,Vx3,1,2500,True,True,0,250,1,0)
+		'Calculated strain result 'Strain_2' for
+		'Full Bridge Strain, 350 ohm measurement 'Vr1000_3'
+		StrainCalc(Strain_3,1,Vr1000_3,BrZero_3,4,GFAdj_3,0)
+		'Bending full bridge strain shunt calibration for
+		'Full Bridge Strain, 350 ohm measurement 'Vr1000_3'
+		FieldCalStrain(43,Strain_3,1,GFAdj_3,0,QBSSMode_3,CKnown_3,CIndex_3,CAvg_3,GFRaw_3,0)
+		'Zeroing calibration for
+		'Full Bridge Strain, 350 ohm measurement 'Vr1000_3'
+		FieldCalStrain(10,Vr1000_3,CReps_3,0,BrZero_3,ZMode_3,0,CIndex_3,CAvg_3,0,Strain_3)
+
+		'////////////////////////////////////////////////
+		'/////////////// LVDT 1 routine /////////////////
+		'////////////////////////////////////////////////
+
+        'Generic Differential Voltage measurements 'Disp_mm'
+		VoltDiff(Disp_mm,1,mV5000,5,True,0,_60Hz,1/GFLV1,COff)
+		'Zeroing calibration for Generic Differential Voltage measurement 'Disp_mm'
+		FieldCal(0,Disp_mm,CReps,0,COff,ZMode,0,CIndex,CAvg)
+
+        '////////////////////////////////////////////////
+		'/////////////// LVDT 2 routine /////////////////
+		'////////////////////////////////////////////////
+
+        'Generic Differential Voltage measurements 'Disp2_mm'
+		VoltDiff(Disp2_mm,1,mV5000,6,True,0,_60Hz,1/GFLV2,COff_1)
+		'Zeroing calibration for Generic Differential Voltage measurement 'Disp2_mm'
+		FieldCal(0,Disp2_mm,CReps_1,0,COff_1,ZMode_1,0,CIndex_1,CAvg_1)
+
+		'////////////////////////////////////////////////
+		'////////// load cell routine ///////////////////
+		'////////////////////////////////////////////////
+    
+		'Load cell measurement 'Vr1000_6'
+		BrFull(Vr1000_6,1,mV25,4,Vx1,1,2500,True,True,0,250,CMult_6,Coff_6)
+		'Zeroing calibration for 'Vr1000_6'
+		FieldCal(0,Vr1000_6,CReps_6,0,Coff_6,ZMode_6,0,CIndex_6,CAvg_6)
+		'Multiplier and offset calibration for 'Vr1000_6'
+		FieldCal(2,Vr1000_6,1,CMult_6,Coff_6,MOMode_6,CKnown_6,CIndex_6,CAvg_6)
+		'Calculate load 'Carga_kg'
+		Carga_kg=Vr1000_6*GFLC
+
+
+		'Call Data Tables and Store Data
+		CallTable(Table1)
+		CallTable(Table2)
+        CallTable(Table3)
+		CallTable(CalHist)
+	NextScan
+EndProg
+
