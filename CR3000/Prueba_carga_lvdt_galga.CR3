@@ -1,0 +1,161 @@
+'Declare Variables and Units
+Public BattV
+Public FCLoaded
+Public PTemp_C
+Public CReps
+Public ZMode
+Public QBSSMode
+Public CIndex
+Public CAvg
+Public LCount
+Public Strain(16)
+Public Vr1000(16)
+Public GFAdj(16)
+Public BrZero(16)
+Public CKnown(16)
+'Digite el GF como la pendiente de la recta obtenida de la calibracion
+Public GFsRaw(16)={500,500,500,500,500,500,500,500,500,500,500,500,500,500,500,500}
+
+'////////////// LVDT //////////////
+
+Public Disp_mm
+Public COff_3
+Public CReps_3
+Public ZMode_3
+Public CIndex_3
+Public CAvg_3
+Public Disp2_mm
+Public COff_4
+Public CReps_4
+Public ZMode_4
+Public CIndex_4
+Public CAvg_4
+
+'Unidades
+Units BattV=Volts
+Units PTemp_C=Deg C
+Units Strain=microstrain
+Units Vr1000=mV/V
+Units GFAdj=unitless
+Units BrZero=mV/V
+
+'//////////// LVDT ////////////////
+
+'Define Data Tables
+DataTable(Table1,True,-1)
+	DataInterval(0,2,Sec,10)
+	Sample(1,Vr1000(1),IEEE4)
+	Sample(1,Vr1000(2),IEEE4)
+	Sample(1,Vr1000(3),IEEE4)
+	Sample(1,Vr1000(4),IEEE4)
+	Sample(1,Vr1000(5),IEEE4)
+	Sample(1,Vr1000(6),IEEE4)
+	Sample(1,Vr1000(7),IEEE4)
+	Sample(1,Vr1000(8),IEEE4)
+	Sample(1,Vr1000(9),IEEE4)
+	Sample(1,Vr1000(10),IEEE4)
+	Sample(1,Vr1000(11),IEEE4)
+	Sample(1,Vr1000(12),IEEE4)
+	Sample(1,Vr1000(13),IEEE4)
+	Sample(1,Vr1000(14),IEEE4)
+	Sample(1,Vr1000(15),IEEE4)
+	Sample(1,Vr1000(16),IEEE4)
+EndTable
+
+DataTable(Table2,True,-1)
+	DataInterval(0,2,Sec,10)
+	Minimum(1,BattV,FP2,False,False)
+	Sample(1,Strain(1),IEEE4)
+	Sample(1,Strain(2),IEEE4)
+	Sample(1,Strain(3),IEEE4)
+	Sample(1,Strain(4),IEEE4)
+	Sample(1,Strain(5),IEEE4)
+	Sample(1,Strain(6),IEEE4)
+	Sample(1,Strain(7),IEEE4)
+	Sample(1,Strain(8),IEEE4)
+	Sample(1,Strain(9),IEEE4)
+	Sample(1,Strain(10),IEEE4)
+	Sample(1,Strain(11),IEEE4)
+	Sample(1,Strain(12),IEEE4)
+	Sample(1,Strain(13),IEEE4)
+	Sample(1,Strain(14),IEEE4)
+	Sample(1,Strain(15),IEEE4)
+	Sample(1,Strain(16),IEEE4)
+EndTable
+
+'tabla LVDT 
+DataTable(Table3,True,-1)
+	DataInterval(0,60,Min,10)
+	Average(1,Disp_mm,FP2,False)
+	Maximum(1,Disp_mm,FP2,False,True)
+	Sample(1,Disp_mm,FP2)
+	Minimum(1,Disp_mm,FP2,False,True)
+	Average(1,Disp2_mm,FP2,False)
+	Sample(1,Disp2_mm,FP2)
+	Totalize(1,Disp2_mm,FP2,False)
+EndTable
+
+'Calibration history table
+DataTable(CalHist,NewFieldCal,10)
+	SampleFieldCal
+EndTable
+
+
+'Main Program
+BeginProg
+
+	'Initialize calibration variables for
+	'Full Bridge Strain, 350 ohm measurement 'Vr1000()'
+	CIndex=1 : CAvg=1 : CReps=16
+	For LCount = 1 To 16
+		GFAdj(LCount)=1000/GFsRaw(LCount)
+	Next
+	'Load the most recent calibration values from the CalHist table
+	FCLoaded=LoadFieldCal(True)
+	'Main Scan
+	Scan(2,Sec,1,0)
+		'Default Datalogger Battery Voltage measurement 'BattV'
+		Battery(BattV)
+		'Default Wiring Panel Temperature measurement 'PTemp_C'
+		PanelTemp(PTemp_C,_60Hz)
+		
+    'Generic Differential Voltage measurements 'Disp_mm'
+		VoltDiff(Disp_mm,1,mV5000,3,True,0,_60Hz,0.0110217,COff_3)
+		'Zeroing calibration for Generic Differential Voltage measurement 'Disp_mm'
+		FieldCal(0,Disp_mm,CReps_3,0,COff_3,ZMode_3,0,CIndex_3,CAvg_3)
+		'Generic Differential Voltage measurements 'Disp2_mm'
+		VoltDiff(Disp2_mm,1,mV5000,4,True,0,_60Hz,0.0110217,COff_4)
+		'Zeroing calibration for Generic Differential Voltage measurement 'Disp2_mm'
+		FieldCal(0,Disp2_mm,CReps_4,0,COff_4,ZMode_4,0,CIndex_4,CAvg_4)
+
+
+		'Turn AM16/32 Multiplexer On
+		PortSet(2,1)
+		Delay(0,150,mSec)
+		LCount=1
+		SubScan(0,uSec,16)
+			'Switch to next AM16/32 Multiplexer channel
+			PulsePort(1,10000)
+			'Full Bridge Strain, 350 ohm measurement 'Vr1000()'
+			BrFull(Vr1000(LCount),1,mV20,1,1,1,5000,True,True,0,250,1,0)
+			LCount=LCount+1
+		NextSubScan
+		'Calculated strain result 'Strain()' for
+		'Full Bridge Strain, 350 ohm measurement 'Vr1000()'
+		StrainCalc(Strain(),16,Vr1000(),BrZero(),4,GFAdj(),0)
+		'Bending full bridge strain shunt calibration for
+		'Full Bridge Strain, 350 ohm measurement 'Vr1000()'
+		FieldCalStrain(43,Strain(),1,GFAdj(),0,QBSSMode,CKnown(),CIndex,CAvg,GFsRaw(),0)
+		'Zeroing calibration for
+		'Full Bridge Strain, 350 ohm measurement 'Vr1000()'
+		FieldCalStrain(10,Vr1000(),CReps,0,BrZero(),ZMode,0,CIndex,CAvg,0,Strain())
+		'Turn AM16/32 Multiplexer Off
+		PortSet(2,0)
+		Delay(0,150,mSec)
+		'Call Data Tables and Store Data
+		CallTable(Table1)
+		CallTable(Table2)
+		CallTable(Table3)
+		CallTable(CalHist)
+	NextScan
+EndProg
