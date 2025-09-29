@@ -14,6 +14,12 @@ Public ZMode
 Public CIndex
 Public CAvg
 Public GFLV1
+Public DiffVolt
+Public CIndexv
+Public CAvgv
+Public CRepsv
+Public COffv
+Public ZModev
 
 'Variables for LVDT 2
 Public Disp2_mm
@@ -23,6 +29,12 @@ Public ZMode_1
 Public CIndex_1
 Public CAvg_1
 Public GFLV2
+Public DiffVolt2
+Public CIndexv2
+Public CAvgv2
+Public CRepsv2
+Public COffv2
+Public ZModev2
 
 'Variables for straingage 1
 Public Strain_2
@@ -68,6 +80,7 @@ Public GFLC
 'Define general units
 Units BattV=Volts
 Units PTemp_C=Deg C
+Units DiffVolt=mV
 
 'Define units for Gage factors
 Units GFSTR1=unitless
@@ -92,13 +105,11 @@ EndTable
 
 'Table LVDT 
 DataTable(Table3,True,-1)
-	DataInterval(0,60,Min,10)
-	Average(1,Disp_mm,FP2,False)
-	Maximum(1,Disp_mm,FP2,False,True)
+	DataInterval(0,5,Sec,10)
 	Sample(1,Disp_mm,FP2)
-	Minimum(1,Disp_mm,FP2,False,True)
-	Average(1,Disp2_mm,FP2,False)
 	Sample(1,Disp2_mm,FP2)
+	Sample(1,DiffVolt,FP2)
+	Sample(1,DiffVolt2,FP2)
 	Totalize(1,Disp2_mm,FP2,False)
 EndTable
 
@@ -132,6 +143,10 @@ BeginProg
 	CIndex_6=1 : CAvg_6=1 : CReps_6=1 :CMult_6=1
 
 	SerialOpen(Com1,38400,0,0,0)
+
+	'Generic Differential Voltage measurement 'DiffVolt'
+	CIndexv=1 : CAvgv=1 : CRepsv=1 : COffv=0
+	CIndexv2=1 : CAvgv2=1 : CRepsv2=1 : COffv2=0
 	
 FCLoaded=LoadFieldCal(True)
 	
@@ -178,19 +193,27 @@ FCLoaded=LoadFieldCal(True)
 		'/////////////// LVDT 1 routine /////////////////
 		'////////////////////////////////////////////////
 
-        'Generic Differential Voltage measurements 'Disp_mm'
+        	'Generic Differential Voltage measurements 'Disp_mm'
 		VoltDiff(Disp_mm,1,mV5000,5,True,0,_60Hz,1/GFLV1,COff)
 		'Zeroing calibration for Generic Differential Voltage measurement 'Disp_mm'
 		FieldCal(0,Disp_mm,CReps,0,COff,ZMode,0,CIndex,CAvg)
+		'Generic Differential Voltage measurements 'DiffVolt'
+		VoltDiff(DiffVolt,1,mV2500,1,True,0,_60Hz,0.11027,COffv)
+		'Zeroing calibration for Generic Differential Voltage measurement 'DiffVolt'
+		FieldCal(0,DiffVolt,CRepvs,0,COffv,ZModev,0,CIndexv,CAvgv)
 
-        '////////////////////////////////////////////////
+        	'////////////////////////////////////////////////
 		'/////////////// LVDT 2 routine /////////////////
 		'////////////////////////////////////////////////
 
-        'Generic Differential Voltage measurements 'Disp2_mm'
+        	'Generic Differential Voltage measurements 'Disp2_mm'
 		VoltDiff(Disp2_mm,1,mV5000,6,True,0,_60Hz,1/GFLV2,COff_1)
 		'Zeroing calibration for Generic Differential Voltage measurement 'Disp2_mm'
 		FieldCal(0,Disp2_mm,CReps_1,0,COff_1,ZMode_1,0,CIndex_1,CAvg_1)
+		'Generic Differential Voltage measurements 'DiffVolt'
+		VoltDiff(DiffVolt2,1,mV2500,1,True,0,_60Hz,0.11027,COffv2)
+		'Zeroing calibration for Generic Differential Voltage measurement 'DiffVolt'
+		FieldCal(0,DiffVolt2,CRepvs2,0,COffv2,ZModev2,0,CIndexv2,CAvgv2)
 
 		'////////////////////////////////////////////////
 		'////////// load cell routine ///////////////////
@@ -209,7 +232,7 @@ FCLoaded=LoadFieldCal(True)
 		'Call Data Tables and Store Data
 		CallTable(Table1)
 		CallTable(Table2)
-        CallTable(Table3)
+        	CallTable(Table3)
 		CallTable(CalHist)
 	NextScan
 EndProg

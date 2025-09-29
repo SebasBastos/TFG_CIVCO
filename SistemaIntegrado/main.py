@@ -9,8 +9,8 @@ def main():
     Flujo de trabajo principal para el procesamiento de datos.
     """
     # 1. Definir directorios
-    data_dir = "data"
-    processed_dir = "processed_data"
+    data_dir = "datos"
+    processed_dir = "archivos_procesados"
 
     if not os.path.exists(processed_dir):
         os.makedirs(processed_dir)
