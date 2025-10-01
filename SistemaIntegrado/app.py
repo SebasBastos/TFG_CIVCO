@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import os
 import shutil
+import altair as alt
 
 # Importa tus funciones de procesamiento desde el paquete data_converters
 from data_converters.convert_dat2csv import convert_dat_to_csv
@@ -38,7 +39,7 @@ def run_conversion_and_cleaning():
     
     files_to_process = [f for f in os.listdir(DATA_DIR) if not f.startswith('.')] # Ignorar archivos ocultos
     if not files_to_process:
-        return 0, "No se encontraron archivos en la carpeta 'data/' para procesar."
+        return 0, "No se encontraron archivos en la carpeta 'datos/' para procesar."
 
     st.toast("Iniciando procesamiento de archivos...", icon="⏳")
 
@@ -77,41 +78,53 @@ def run_conversion_and_cleaning():
             
     return processed_count, "¡Proceso de conversión y limpieza completado!"
 
-# --- FUNCIONES DE CARGA DE DATOS PARA EL DASHBOARD ---
-
+# app.py - ACTUALIZAR FUNCIONES DE CARGA DE DATOS
 @st.cache_data(show_spinner="Cargando datos procesados...")
-def load_processed_data(data_folder):
+def load_processed_data(folder_list):
     """
-    Carga y unifica todos los archivos _modificado.csv de una carpeta.
+    Carga, unifica y limpia los archivos _modificado.csv de una lista de carpetas.
+    Asegura que las columnas de RECORD y TIMESTAMP se manejen correctamente.
     """
     all_dfs = []
-    for root, _, files in os.walk(data_folder):
-        for file in files:
-            if file.endswith('_modificado.csv'):
-                filepath = os.path.join(root, file)
-                try:
-                    df = pd.read_csv(filepath)
-                    # Añadir columna de origen para diferenciar si es necesario
-                    df['Origen_Archivo'] = file 
-                    # Intentar convertir una columna 'Timestamp' o 'TIME' si existe
-                    time_col = next((col for col in df.columns if 'time' in col.lower()), None)
-                    if time_col:
-                        df[time_col] = pd.to_datetime(df[time_col])
-                        df.set_index(time_col, inplace=True)
+    RECORD_COL = 'RECORD'
+    
+    # Itera sobre la lista de carpetas (STATIC y DYNAMIC)
+    for data_folder in folder_list:
+        for root, _, files in os.walk(data_folder):
+            for file in files:
+                if file.endswith('_modificado.csv'):
+                    filepath = os.path.join(root, file)
+                    try:
+                        df = pd.read_csv(filepath)
+                        df['Origen_Archivo'] = file 
                         
-                    all_dfs.append(df)
-                except Exception as e:
-                    st.error(f"Error al cargar {filepath}: {e}")
+                        # Manejo de RECORD (Necesario para eje X)
+                        if RECORD_COL in df.columns:
+                            # Forzar la conversión a numérico. Los errores (NAN, etc.) serán NaN.
+                            df[RECORD_COL] = pd.to_numeric(df[RECORD_COL], errors='coerce')
+
+                        # Manejo de TIMESTAMP (Para futuro uso o indexación)
+                        time_col = next((col for col in df.columns if 'timestamp' in col.lower() or 'time' in col.lower()), None)
+                        if time_col:
+                            try:
+                                # Intenta parsear con microsegundos, si falla usa 'mixed'
+                                df[time_col] = pd.to_datetime(df[time_col], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
+                                if df[time_col].isna().all():
+                                    df[time_col] = pd.to_datetime(df[time_col], format='mixed', errors='coerce')
+                                df.set_index(time_col, inplace=True)
+                            except Exception:
+                                # Si falla, deja el índice como está
+                                pass 
+                            
+                        all_dfs.append(df)
+                    except Exception as e:
+                        st.error(f"Error al cargar {filepath}: {e}")
     
     if all_dfs:
-        # Intentar concatenar, manejando columnas diferentes
-        # Considera cómo unificar DataFrames con diferentes sensores.
-        # Una opción simple es unir por índice de tiempo si los hay.
-        # Para POC, solo concatenaremos y llenaremos NaN.
-        unified_df = pd.concat(all_dfs, ignore_index=True) # O usar join por índice si ya está en time
-        unified_df.sort_index(inplace=True)
+        # Concatenar todos los DataFrames y rellenar con NaN donde falte una columna
+        unified_df = pd.concat(all_dfs, ignore_index=True)
         return unified_df
-    return pd.DataFrame() # Retorna un DataFrame vacío si no hay datos
+    return pd.DataFrame() 
 
 # --- BARRA LATERAL (SIDEBAR) PARA NAVEGACIÓN ---
 
@@ -146,6 +159,7 @@ if page_selection == "Panel de Control":
                         help="Haga clic para procesar todos los archivos en la carpeta de datos"):
                 with st.spinner("Procesando archivos..."):
                     count, message = run_conversion_and_cleaning()
+                    st.cache_data.clear() # Limpiar caché para recargar datos en el dashboard
                     if count > 0:
                         st.success(f"{message} Se procesaron {count} archivos.")
                         #st.balloons()
@@ -177,51 +191,60 @@ if page_selection == "Panel de Control":
 
 # --- CONTENIDO SELECCIÓN DASHBOARD ---
 
+# app.py - SECCIÓN Dashboard de Datos (MODIFICADO)
+
 elif page_selection == "Dashboard de Datos":
-    st.title("Dashboard Interactivo 📊")
+    st.title("Dashboard Interactivo de Monitoreo Estructural 📊")
     st.markdown("Visualice las mediciones de Strain y Aceleración del puente.")
 
-    # Cargar datos del directorio procesado
-    # Unificamos ambos directorios para el dashboard (ajustar si prefieres separarlos)
-    all_processed_data = pd.DataFrame()
+    # Botón de Recarga Manual
+    if st.button("🔄 Recargar Datos del Disco"):
+        st.cache_data.clear()
+        st.rerun() # Forzar el re-renderizado de toda la página
     
-    static_data = load_processed_data(STATIC_DIR)
-    dynamic_data = load_processed_data(DYNAMIC_DIR)
+    # 1. Cargar datos de ambas carpetas
+    all_processed_data = load_processed_data([STATIC_DIR, DYNAMIC_DIR])
 
-    if not static_data.empty:
-        all_processed_data = pd.concat([all_processed_data, static_data])
-    if not dynamic_data.empty:
-        all_processed_data = pd.concat([all_processed_data, dynamic_data])
+    # 2. Verificación de archivos encontrados (Ahora en la carga)
+    found_files_static = [f for f in os.listdir(STATIC_DIR) if f.endswith('_modificado.csv')]
+    st.sidebar.markdown("### Archivos Encontrados (Estaticos):")
+    st.sidebar.write(found_files_static)
+    # -------------------------------------------------------------------
+    # --- Comprobación de existencia de datos y la columna RECORD ---
+    # -------------------------------------------------------------------
     
     if all_processed_data.empty:
-        st.warning("No hay datos procesados disponibles para mostrar en el dashboard. Por favor, procese los archivos primero.")
+        st.warning("No hay datos procesados disponibles para mostrar en el dashboard.")
+    elif 'RECORD' not in all_processed_data.columns:
+        st.error("La columna 'RECORD' (índice de muestra) es necesaria para los gráficos estáticos y no se encuentra.")
     else:
-        # --- FILTROS GLOBALES (Ej. por fecha) ---
+        # Asegurarse de que RECORD esté limpio para el eje X
+        all_processed_data.dropna(subset=['RECORD'], inplace=True)
+        
+        # --- FILTROS GLOBALES ---
         st.sidebar.header("Filtros del Dashboard")
         
-        # Asumiendo que el índice es de tiempo
-        min_date = all_processed_data.index.min()
-        max_date = all_processed_data.index.max()
-        
-        date_range = st.sidebar.slider(
-            "Seleccionar Rango de Fechas:",
-            value=(min_date.to_pydatetime(), max_date.to_pydatetime()),
-            format="YYYY/MM/DD",
-            key='dashboard_date_filter'
+        # Filtro de Origen de Archivo (para ver solo CR3000 o ESP32)
+        origins = sorted(all_processed_data['Origen_Archivo'].unique())
+        selected_origin = st.sidebar.multiselect(
+            "Filtrar por Archivo Origen:",
+            options=origins,
+            default=origins
         )
         
-        start_date, end_date = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
-        df_filtered = all_processed_data[(all_processed_data.index >= start_date) & (all_processed_data.index <= end_date)]
-
+        df_filtered = all_processed_data[all_processed_data['Origen_Archivo'].isin(selected_origin)]
+        
         if df_filtered.empty:
-            st.warning("No hay datos para el rango de fechas seleccionado.")
+            st.warning("No hay datos para la selección actual de filtros.")
         else:
             # --- Pestañas para Clasificación (Estatica vs Dinamica) ---
             tab1, tab2 = st.tabs(["Pruebas Estáticas (Strain)", "Pruebas Dinámicas (Aceleración)"])
 
-            # Pestaña 1: Pruebas Estáticas
+            # Pestaña 1: Pruebas Estáticas (RECORD vs STRAIN)
             with tab1:
                 st.header("Tensión Superficial (Strain)")
+                
+                # Identificar todas las columnas de Strain numéricas
                 strain_cols = [col for col in df_filtered.columns if 'Strain' in col and df_filtered[col].dtype in ['float64', 'int64']]
                 
                 if strain_cols:
@@ -233,30 +256,45 @@ elif page_selection == "Dashboard de Datos":
                     )
                     
                     if selected_strain:
-                        st.line_chart(df_filtered[selected_strain], use_container_width=True)
-                        st.metric("Máximo Strain Registrado (µε)", f"{df_filtered[selected_strain].max().max():.2f}")
+                        # Crear la lista de datos a graficar: RECORD + Strain seleccionados
+                        cols_to_plot = ['RECORD'] + selected_strain
+                        plot_data = df_filtered[cols_to_plot].sort_values(by='RECORD')
+
+                        st.subheader("Gráfico: RECORD vs. Strain")
+                        
+                        # Usar st.line_chart con el DataFrame, especificando el eje X.
+                        # NOTA: st.line_chart usa el índice, por lo que usaremos Altair para mayor control.
+                        import altair as alt
+                        
+                        # Derretir el DataFrame para facilitar la graficación de múltiples series en Altair
+                        df_melted = plot_data.melt(
+                            id_vars=['RECORD'],
+                            value_vars=selected_strain,
+                            var_name='Galgas',
+                            value_name='Microstrain'
+                        )
+
+                        chart = alt.Chart(df_melted).mark_line().encode(
+                            x=alt.X('RECORD', title='Índice de Muestra (RECORD)'),
+                            y=alt.Y('Microstrain', title='Strain (microstrain)'),
+                            color='Galgas',
+                            tooltip=['RECORD', 'Galgas', 'Microstrain']
+                        ).properties(
+                            title='Strain vs. RECORD'
+                        ).interactive() # Permite hacer zoom y pan
+                        
+                        st.altair_chart(chart, use_container_width=True)
+                        
+                        # Métrica clave
+                        max_val = df_filtered[selected_strain].max().max()
+                        st.metric("Máximo Strain Registrado (µε)", f"{max_val:.2f}")
                     else:
                         st.info("Selecciona al menos una Galga Extensiométrica para visualizar.")
                 else:
                     st.info("No se encontraron columnas de Strain en los datos.")
 
-            # Pestaña 2: Pruebas Dinámicas
+            # Pestaña 2: Pruebas Dinámicas (Mantener por si usa Acelerómetros)
             with tab2:
-                st.header("Vibración y Aceleración")
-                accel_cols = [col for col in df_filtered.columns if ('Aceleracion' in col or 'Accel' in col) and df_filtered[col].dtype in ['float64', 'int64']]
-
-                if accel_cols:
-                    selected_accel = st.multiselect(
-                        "Seleccionar Acelerómetros:",
-                        options=accel_cols,
-                        default=accel_cols[0] if accel_cols else [],
-                        key='accel_select'
-                    )
-                    
-                    if selected_accel:
-                        st.line_chart(df_filtered[selected_accel], use_container_width=True)
-                        st.metric("Máxima Amplitud de Aceleración Absoluta (g)", f"{df_filtered[selected_accel].abs().max().max():.3f}")
-                    else:
-                        st.info("Selecciona al menos un Acelerómetro para visualizar.")
-                else:
-                    st.info("No se encontraron columnas de Aceleración en los datos.")
+                # ... Lógica para Acelerómetros vs. TIMESTAMP o RECORD (depende de la prueba) ...
+                st.info("Esta sección es para datos dinámicos como Aceleración (vs. TIMESTAMP).")
+                # Aquí podrías usar una lógica similar, pero graficando vs. TIMESTAMP.
