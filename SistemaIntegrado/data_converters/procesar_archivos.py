@@ -15,31 +15,40 @@ def clean_data_csv(input_filepath, output_filepath, is_static):
         # --- 1. Manejo de Calibración Inicial (Solo para Pruebas Estáticas) ---
         if is_static:
             
-            # Columnas de galgas extensiométricas a revisar
+            # **SOLUCIÓN:** Inicializar start_index a 0 antes del bloque condicional
+            start_index = 0 
+            
             strain_cols = [col for col in df.columns if 'Strain' in col]
             
-            # Lógica para encontrar la primera fila donde se considera calibrado (entre -2 y 2)
-            start_index = 0
+            # Convertir las columnas de Strain a numérico
+            for col in strain_cols:
+                df[col] = pd.to_numeric(df[col], errors='coerce') 
             
-            if strain_cols:
-                # Crea una máscara booleana: True si TODAS las galgas en esa fila están entre -2 y 2
+            # Quitar filas que solo contienen NaN en las columnas de Strain
+            df.dropna(subset=strain_cols, how='all', inplace=True)
+            
+            # Lógica para encontrar la primera fila donde se considera calibrado (entre -2 y 2)
+            if strain_cols and not df.empty: # Añadir comprobación de df no vacío
+                
                 calibration_mask = (df[strain_cols].apply(lambda x: (x >= -2) & (x <= 2)).all(axis=1))
                 
-                # Encuentra el índice de la PRIMERA ocurrencia de la máscara True
                 try:
+                    # idxmax() encuentra el primer índice con True
                     first_calibration_row = calibration_mask.idxmax()
-                    # Si el primer valor True está más allá de la fila 0, recortamos
-                    if first_calibration_row > 0:
+                    
+                    # Si la calibración ocurre después de la primera fila
+                    if first_calibration_row > 0 and calibration_mask.any():
                         start_index = first_calibration_row
                         print(f"   -> Calibración: Eliminando {start_index} filas iniciales.")
-                except:
-                    # Si no encuentra True, podría no haber una calibración visible, no hace nada
+                except Exception as e:
+                    # Esto maneja el caso donde la máscara está vacía o algo falló en idxmax
+                    print(f"   -> Advertencia en calibración: {e}")
                     pass 
 
             # Recorta el DataFrame a partir del índice encontrado
+            # Esta línea ahora siempre funcionará porque start_index está definido
             df = df.iloc[start_index:]
             df.reset_index(drop=True, inplace=True) # Resetea el índice
-
         # --- 2. Reemplazo de NAN por celdas vacías ---
         
         # Reemplaza los valores NaN de Python (np.nan) por una cadena vacía ('')
