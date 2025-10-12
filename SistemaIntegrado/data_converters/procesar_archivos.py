@@ -5,56 +5,22 @@ import re
 
 def clean_data_csv(input_filepath, output_filepath, is_static):
     """
-    Limpia un archivo .csv: elimina filas antes de calibración y
-    reemplaza valores NAN por celda vacía.
+    Limpia un archivo .csv de datos estáticos:
+    Solo convierte los valores NaN de Pandas a celdas vacías en el CSV.
+    La lógica de eliminación por calibración ha sido removida.
     """
-
     try:
-        # Lee el archivo, asegurándose de que los 'NAN' del texto se interpreten como nulos.
+        # 1. Lee el archivo, tratando explícitamente 'NAN' como nulo.
         df = pd.read_csv(input_filepath, na_values=['NAN', ''])
         
-        # --- 1. Manejo de Calibración Inicial (Solo para Pruebas Estáticas) ---
-        if is_static:
-            
-            # **SOLUCIÓN:** Inicializar start_index a 0 antes del bloque condicional
-            start_index = 0 
-            
-            strain_cols = [col for col in df.columns if 'Strain' in col]
-            
-            # Convertir las columnas de Strain a numérico
-            for col in strain_cols:
-                df[col] = pd.to_numeric(df[col], errors='coerce') 
-            
-            # Quitar filas que solo contienen NaN en las columnas de Strain
-            df.dropna(subset=strain_cols, how='all', inplace=True)
-            
-            # Lógica para encontrar la primera fila donde se considera calibrado (entre -2 y 2)
-            if strain_cols and not df.empty: # Añadir comprobación de df no vacío
-                
-                calibration_mask = (df[strain_cols].apply(lambda x: (x >= -2) & (x <= 2)).all(axis=1))
-                
-                try:
-                    # idxmax() encuentra el primer índice con True
-                    first_calibration_row = calibration_mask.idxmax()
-                    
-                    # Si la calibración ocurre después de la primera fila
-                    if first_calibration_row > 0 and calibration_mask.any():
-                        start_index = first_calibration_row
-                        print(f"   -> Calibración: Eliminando {start_index} filas iniciales.")
-                except Exception as e:
-                    # Esto maneja el caso donde la máscara está vacía o algo falló en idxmax
-                    print(f"   -> Advertencia en calibración: {e}")
-                    pass 
+        # Opcional pero recomendado: Limpieza de filas totalmente vacías
+        # Esto elimina filas que no contienen ninguna información útil
+        df.dropna(how='all', inplace=True) 
 
-            # Recorta el DataFrame a partir del índice encontrado
-            # Esta línea ahora siempre funcionará porque start_index está definido
-            df = df.iloc[start_index:]
-            df.reset_index(drop=True, inplace=True) # Resetea el índice
-        # --- 2. Reemplazo de NAN por celdas vacías ---
+        # --- Reemplazo de NAN por celdas vacías ---
         
-        # Reemplaza los valores NaN de Python (np.nan) por una cadena vacía ('')
-        # Esto hace que la celda quede vacía en el archivo CSV resultante.
-        df = df.replace({np.nan: ''})
+        # Reemplaza los valores NaN de Python (np.nan o pd.NA) por una cadena vacía ('')
+        df = df.replace({np.nan: '', pd.NA: ''})
         
         # Guardar el archivo modificado
         df.to_csv(output_filepath, index=False)
