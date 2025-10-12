@@ -6,28 +6,77 @@ import re
 def clean_data_csv(input_filepath, output_filepath, is_static):
     """
     Limpia un archivo .csv de datos estáticos:
-    Solo convierte los valores NaN de Pandas a celdas vacías en el CSV.
-    La lógica de eliminación por calibración ha sido removida.
+    - Maneja archivos con punto y coma como separador
+    - Preserva la columna RECORD como numérica
+    - Convierte valores NaN a celdas vacías en columnas de datos
     """
     try:
-        # 1. Lee el archivo, tratando explícitamente 'NAN' como nulo.
-        df = pd.read_csv(input_filepath, na_values=['NAN', ''])
+        # 1. Detectar el separador automáticamente
+        with open(input_filepath, 'r', encoding='utf-8') as f:
+            first_line = f.readline()
         
-        # Opcional pero recomendado: Limpieza de filas totalmente vacías
-        # Esto elimina filas que no contienen ninguna información útil
-        df.dropna(how='all', inplace=True) 
-
-        # --- Reemplazo de NAN por celdas vacías ---
+        # Detectar si usa punto y coma como separador
+        if ';' in first_line and first_line.count(';') > first_line.count(','):
+            separator = ';'
+        else:
+            separator = ','
         
-        # Reemplaza los valores NaN de Python (np.nan o pd.NA) por una cadena vacía ('')
-        df = df.replace({np.nan: '', pd.NA: ''})
+        # 2. Leer el archivo con el separador correcto
+        df = pd.read_csv(input_filepath, sep=separator, na_values=['NAN', ''], encoding='utf-8')
         
-        # Guardar el archivo modificado
-        df.to_csv(output_filepath, index=False)
-        print(f"   -> Limpieza: Archivo guardado con éxito en '{output_filepath}'.")
+        # 3. Preservar y asegurar que RECORD sea numérico
+        if 'RECORD' in df.columns:
+            df['RECORD'] = pd.to_numeric(df['RECORD'], errors='coerce')
+            df = df.dropna(subset=['RECORD'])
+            df['RECORD'] = df['RECORD'].astype(int)
+        else:
+            # Buscar columnas que contengan 'record' (case insensitive)
+            possible_record_cols = [col for col in df.columns if 'record' in col.lower()]
+            if possible_record_cols:
+                original_col_name = possible_record_cols[0]
+                df = df.rename(columns={original_col_name: 'RECORD'})
+                df['RECORD'] = pd.to_numeric(df['RECORD'], errors='coerce').fillna(0).astype(int)
+            else:
+                # Si no hay RECORD, crear una columna basada en el índice
+                df['RECORD'] = range(1, len(df) + 1)
+        
+        # 4. Procesar columna TIMESTAMP
+        if 'TIMESTAMP' in df.columns:
+            try:
+                df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'], errors='coerce')
+                if df['TIMESTAMP'].isna().all():
+                    df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'], format='%d/%m/%Y %H:%M', errors='coerce')
+            except Exception:
+                pass  # Mantener como está si falla la conversión
+        
+        # 5. Identificar y limpiar columnas de datos
+        data_columns = []
+        for col in df.columns:
+            if col not in ['RECORD', 'TIMESTAMP'] and df[col].dtype in ['float64', 'int64', 'object']:
+                if df[col].dtype == 'object':
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                data_columns.append(col)
+        
+        # 6. Limpieza de datos numéricos (reemplazar NaN con '')
+        for col in data_columns:
+            df[col] = df[col].replace({np.nan: '', pd.NA: ''})
+        
+        # 7. Eliminar filas totalmente vacías
+        df.dropna(how='all', subset=data_columns, inplace=True)
+        
+        # 8. Guardar el archivo modificado
+        os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
+        df.to_csv(output_filepath, index=False, encoding='utf-8')
         
     except Exception as e:
-        print(f"❌ Error al limpiar el archivo {input_filepath}: {e}") 
+        # En caso de error, guardar el archivo original como respaldo
+        try:
+            df = pd.read_csv(input_filepath)
+            os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
+            df.to_csv(output_filepath, index=False)
+        except:
+            pass
+        raise e
     
 
 def clean_dynamic_data(input_filepath, output_filepath):
