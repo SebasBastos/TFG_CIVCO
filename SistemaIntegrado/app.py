@@ -51,42 +51,50 @@ def run_conversion_and_cleaning():
         is_static = False
         original_csv_path = None
         
-        if filename.endswith(('.dat', '.csv')): 
+        if filename.endswith('.dat'): 
             target_dir = STATIC_DIR
             is_static = True
-            if filename.endswith('.dat'):
-                original_csv_path = os.path.join(target_dir, f"{base_name}_original.csv")
-                convert_dat_to_csv(input_filepath, original_csv_path)
-            elif filename.endswith('.csv'): 
-                original_csv_path = os.path.join(target_dir, f"{base_name}_original.csv")
-                shutil.copy(input_filepath, original_csv_path)
+            original_csv_path = os.path.join(target_dir, f"{base_name}_original.csv")
+            convert_dat_to_csv(input_filepath, original_csv_path)
         
         elif filename.endswith('.tdms'): 
             target_dir = DYNAMIC_DIR
             is_static = False
             original_csv_path = os.path.join(target_dir, f"{base_name}_original.csv")
             convert_tdms_to_csv(input_filepath, original_csv_path)
-        else:
-            st.warning(f"Ignorando '{filename}': formato no soportado.")
-            continue
-
+            
+        elif filename.endswith('.csv'):
+            # PARA CSV DEL ESP32 - siempre van a estáticos
+            target_dir = STATIC_DIR
+            is_static = True
+            original_csv_path = os.path.join(target_dir, f"{base_name}_original.csv")
+            
+            # Asegurar que el directorio existe
+            os.makedirs(target_dir, exist_ok=True)
+            
+            # Copiar el archivo CSV original
+            shutil.copy(input_filepath, original_csv_path)
         if original_csv_path and os.path.exists(original_csv_path):
             modified_csv_path = os.path.join(target_dir, f"{base_name}_modificado.csv")
 
-            if is_static:
-                clean_data_csv(original_csv_path, modified_csv_path, is_static)
-            else:
-                clean_dynamic_data(original_csv_path, modified_csv_path)
+            try:
+                if is_static:
+                    clean_data_csv(original_csv_path, modified_csv_path, is_static)
+                else:
+                    clean_dynamic_data(original_csv_path, modified_csv_path)
 
-            processed_count += 1
-            st.toast(f"✅ Procesado: {filename}")
+                processed_count += 1
+                st.toast(f"✅ Procesado: {filename}")
+            except Exception as e:
+                st.error(f"Error en limpieza de {filename}: {e}")
+                continue
             
     return processed_count, "¡Proceso de conversión y limpieza completado!"
-
 @st.cache_data(show_spinner="Cargando datos procesados...")
 def load_processed_data(folder_list):
     """
     Carga, unifica y limpia los archivos _modificado.csv de una lista de carpetas.
+    Mejorado para manejar diferentes formatos de timestamp.
     """
     all_dfs = []
     RECORD_COL = 'RECORD'
@@ -106,21 +114,31 @@ def load_processed_data(folder_list):
                         elif DYNAMIC_DIR in root:
                             df['Tipo_Prueba'] = 'Dinámica'
                         
+                        # Asegurar que RECORD sea numérico
                         if RECORD_COL in df.columns:
                             df[RECORD_COL] = pd.to_numeric(df[RECORD_COL], errors='coerce')
+                        else:
+                            st.warning(f"Archivo {file} no tiene columna RECORD")
 
-                        time_col = next((col for col in df.columns if 'timestamp' in col.lower() or 'time' in col.lower()), None)
+                        # Manejo robusto de timestamp para diferentes formatos
+                        time_col = next((col for col in df.columns if 'timestamp' in col.lower()), None)
                         
                         if time_col:
                             if time_col != 'TIMESTAMP':
                                 df.rename(columns={time_col: 'TIMESTAMP'}, inplace=True)
                             
+                            # Intentar diferentes formatos de timestamp
                             try:
                                 df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
                                 if df['TIMESTAMP'].isna().all():
+                                    df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'], format="%Y-%m-%d %H:%M:%S", errors='coerce')
+                                if df['TIMESTAMP'].isna().all():
                                     df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'], format='mixed', errors='coerce')
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                st.warning(f"No se pudo convertir TIMESTAMP en {file}: {e}")
+                                # Si falla, crear un timestamp artificial basado en RECORD
+                                if RECORD_COL in df.columns:
+                                    df['TIMESTAMP'] = pd.date_range(start='2024-01-01', periods=len(df), freq='1S')
                             
                         all_dfs.append(df)
                     except Exception as e:
