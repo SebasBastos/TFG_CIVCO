@@ -202,8 +202,6 @@ elif page_selection == "Dashboard de Datos":
     all_processed_data = load_processed_data([STATIC_DIR, DYNAMIC_DIR])
 
     found_files_static = [f for f in os.listdir(STATIC_DIR) if f.endswith('_modificado.csv')]
-    st.sidebar.markdown("### Archivos Encontrados (Estaticos):")
-    st.sidebar.write(found_files_static)
     
     if all_processed_data.empty:
         st.warning("No hay datos procesados disponibles para mostrar en el dashboard.")
@@ -232,7 +230,7 @@ elif page_selection == "Dashboard de Datos":
 
             # PESTAÑA 1: ESTÁTICAS
             with tab1:
-                st.header("Tensión Superficial (Strain)")
+                st.header("Análisis de Datos Estáticos (Strain y Desplazamiento)")
                 
                 # Filtrar solo datos estáticos
                 df_static = df_filtered[df_filtered['Tipo_Prueba'] == 'Estática'].copy()
@@ -258,13 +256,18 @@ elif page_selection == "Dashboard de Datos":
                         (df_static['RECORD'] <= record_range_static[1])
                     ]
                     
+                    st.info(f"📊 Datos en el rango seleccionado: {len(df_static):,} muestras")
+                    
+                    # --- GRÁFICO 1: STRAIN ---
                     strain_cols = [col for col in df_static.columns if 'Strain' in col and df_static[col].dtype in ['float64', 'int64']]
                     
                     if strain_cols:
+                        st.subheader("Tensión Superficial (Strain) vs. RECORD")
+                        
                         selected_strain = st.multiselect(
                             "Seleccionar Galgas:",
                             options=strain_cols,
-                            default=strain_cols[0] if strain_cols else [],
+                            default=strain_cols,#[0] if strain_cols else [],
                             key='strain_select'
                         )
                         
@@ -272,8 +275,6 @@ elif page_selection == "Dashboard de Datos":
                             cols_to_plot = ['RECORD'] + selected_strain
                             plot_data = df_static[cols_to_plot].sort_values(by='RECORD')
 
-                            st.subheader("Gráfico: RECORD vs. Strain")
-                            
                             df_melted = plot_data.melt(
                                 id_vars=['RECORD'],
                                 value_vars=selected_strain,
@@ -281,7 +282,7 @@ elif page_selection == "Dashboard de Datos":
                                 value_name='Microstrain'
                             )
 
-                            chart = alt.Chart(df_melted).mark_line().encode(
+                            chart = alt.Chart(df_melted).mark_line(size=1).encode(
                                 x=alt.X('RECORD:Q', 
                                        title='Índice de Muestra (RECORD)',
                                        scale=alt.Scale(domain=[record_range_static[0], record_range_static[1]])),
@@ -302,7 +303,51 @@ elif page_selection == "Dashboard de Datos":
                             st.info("Selecciona al menos una Galga Extensiométrica para visualizar.")
                     else:
                         st.info("No se encontraron columnas de Strain en los datos.")
+                    
+                    st.markdown("---")
+                    
+                    # --- GRÁFICO 2: DESPLAZAMIENTO (LVDT) ---
+                    lvdt_cols = [col for col in df_static.columns if col.startswith('Disp') and df_static[col].dtype in ['float64', 'int64']]
+                    
+                    if lvdt_cols:
+                        st.subheader("Desplazamiento (LVDT) vs. RECORD")
+                        
+                        selected_lvdt_static = st.multiselect(
+                            "Seleccionar Sensores de Desplazamiento (LVDT):",
+                            options=lvdt_cols,
+                            default=lvdt_cols,
+                            key='lvdt_select_static'
+                        )
+                        
+                        if selected_lvdt_static:
+                            cols_to_plot_lvdt = ['RECORD'] + selected_lvdt_static
+                            plot_data_lvdt = df_static[cols_to_plot_lvdt].sort_values(by='RECORD')
+                            
+                            df_melted_lvdt = plot_data_lvdt.melt(
+                                id_vars=['RECORD'],
+                                value_vars=selected_lvdt_static,
+                                var_name='Sensor',
+                                value_name='Desplazamiento'
+                            )
 
+                            chart_lvdt = alt.Chart(df_melted_lvdt).mark_line(size=1).encode(
+                                x=alt.X('RECORD:Q', 
+                                       title='Índice de Muestra (RECORD)',
+                                       scale=alt.Scale(domain=[record_range_static[0], record_range_static[1]])),
+                                y=alt.Y('Desplazamiento:Q', title='Desplazamiento (mm)'),
+                                color='Sensor:N',
+                                tooltip=['RECORD:Q', 'Sensor:N', 'Desplazamiento:Q']
+                            ).properties(
+                                title='Desplazamiento vs. RECORD',
+                                width='container',
+                                height=400
+                            ).interactive()
+                            
+                            st.altair_chart(chart_lvdt, use_container_width=True)
+                        else:
+                            st.info("Selecciona al menos un LVDT para visualizar.")
+                    else:
+                        st.info("No se encontraron columnas de Desplazamiento (disp_mm, disp2_mm) para graficar.")
             # PESTAÑA 2: DINÁMICAS
             with tab2:
                 st.header("Análisis de Datos Dinámicos (Aceleración y Desplazamiento)")
