@@ -2,6 +2,11 @@
 Sistema Integrado de Monitoreo Estructural
 Dashboard para visualizar datos de galgas extensiométricas, LVDT y acelerómetros
 """
+# Estructura general del código hecha por GeminiAI
+# Mejoras y optimización con Claude 4.5
+# código de streamlit basado en el canal de Youtube "Programming Is Fun"
+# https://www.youtube.com/watch?v=7yAw1nPareM&t=2923s
+# https://www.youtube.com/watch?v=6Eu2b34alsE&list=PLWuFHho1zKhWN-Qp5hrR0e9RZIo7QO7z6
 
 import streamlit as st
 import pandas as pd

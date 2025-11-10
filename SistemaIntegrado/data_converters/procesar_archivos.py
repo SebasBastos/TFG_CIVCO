@@ -2,6 +2,9 @@
 Módulo para limpieza y normalización de archivos CSV
 Maneja datos estáticos (galgas extensiométricas) y dinámicos (TDMS)
 """
+# Código basado en:
+# Solución de problemas y optimización hecha con Claude 4.5
+# Estructura del código hecha por GeminiAI
 
 import pandas as pd
 import numpy as np
