@@ -1,0 +1,32 @@
+function doGet(e) {
+  try {
+    // Obtener la hoja activa del documento vinculado
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Hoja 1');
+    
+    // Si no existe 'Hoja 1', usar la primera hoja disponible
+    if (!sheet) {
+      sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+    }
+    
+    // Obtener parámetros
+    var timestamp = e.parameter.timestamp || 'N/A';
+    var record = e.parameter.record || '0';
+    var strain = e.parameter.strain || '0';
+    var voltage = e.parameter.voltage || '0';
+    
+    // Si la hoja está vacía, agregar encabezados
+    if (sheet.getLastRow() == 0) {
+      sheet.appendRow(['TIMESTAMP', 'RECORD', 'Strain', 'Vstrain']);
+      // Formatear encabezados (opcional)
+      sheet.getRange(1, 1, 1, 4).setFontWeight('bold');
+    }
+    
+    // Agregar nueva fila con los datos
+    sheet.appendRow([timestamp, record, strain, voltage]);
+    
+    return ContentService.createTextOutput('Success: Data saved');
+    
+  } catch (error) {
+    return ContentService.createTextOutput('Error: ' + error.toString());
+  }
+}
